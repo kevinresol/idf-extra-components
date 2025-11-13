@@ -9,6 +9,8 @@
 #include <errno.h>
 #include <esp_log.h>
 #include <esp_err.h>
+#include <esp_heap_caps.h>
+
 
 #include "mbedtls/version.h"
 #include "mbedtls/pk.h"
@@ -139,7 +141,7 @@ static int decipher_gcm_key(const char *enc_gcm, esp_encrypted_img_t *handle)
         goto exit;
     }
 
-    void *tmp_buf = realloc(handle->cache_buf, CACHE_BUF_SIZE);
+    void *tmp_buf = heap_caps_realloc(handle->cache_buf, CACHE_BUF_SIZE, MALLOC_CAP_INTERNAL);
     if (!tmp_buf) {
         ESP_LOGE(TAG, "Failed to reallocate memory for cache buffer");
         ret = ESP_ERR_NO_MEM;
@@ -192,7 +194,7 @@ static int decipher_gcm_key(const char *enc_gcm, esp_encrypted_img_t *handle)
         ESP_LOGE(TAG, "failed\n  ! mbedtls_pk_decrypt returned -0x%04x\n", (unsigned int) - ret );
         goto exit;
     }
-    void *tmp_buf = realloc(handle->cache_buf, CACHE_BUF_SIZE);
+    void *tmp_buf = heap_caps_realloc(handle->cache_buf, CACHE_BUF_SIZE, MALLOC_CAP_INTERNAL);
     if (!tmp_buf) {
         ESP_LOGE(TAG, "Failed to reallocate memory for cache buffer");
         ret = ESP_ERR_NO_MEM;
@@ -251,7 +253,7 @@ static esp_err_t esp_encrypted_img_export_rsa_pub_key(const char *rsa_pem, size_
     }
 
     size_t max_pub_key_size = MBEDTLS_MPI_MAX_SIZE + RSA_MPI_ASN1_HEADER_SIZE;
-    *pub_key = calloc(1, max_pub_key_size + 1);
+    *pub_key = heap_caps_calloc(1, max_pub_key_size + 1, MALLOC_CAP_INTERNAL);
     if (*pub_key == NULL) {
         ESP_LOGE(TAG, "Failed to allocate memory for public key");
         goto exit;
@@ -261,7 +263,7 @@ static esp_err_t esp_encrypted_img_export_rsa_pub_key(const char *rsa_pem, size_
 
     ret = mbedtls_pk_write_pubkey(&c, *pub_key, &pk);
     if (ret < 0) {
-        ESP_LOGE(TAG, "Failed to write public key: -0x%04x", (unsigned int) - ret);
+        ESP_LOGE(TAG, "Failed to write public key: -0x%04x", (unsigned int)-ret);
         goto exit;
     }
     if (c - *pub_key < 0) {
@@ -275,7 +277,7 @@ static esp_err_t esp_encrypted_img_export_rsa_pub_key(const char *rsa_pem, size_
     // and we need to adjust the pointer to point to the start of the key.
     memmove(*pub_key, c, *pub_key_len);
     // Resize the public key buffer to the actual length
-    unsigned char *temp_pub_key = realloc(*pub_key, *pub_key_len);
+    unsigned char *temp_pub_key = heap_caps_realloc(*pub_key, *pub_key_len, MALLOC_CAP_INTERNAL);
     if (temp_pub_key == NULL) {
         ESP_LOGE(TAG, "Failed to resize public key buffer");
         goto exit;
@@ -387,14 +389,14 @@ static mbedtls_ecp_point *get_server_public_point(const char *data, size_t len)
         return NULL;
     }
 
-    server_public_point = calloc(1, sizeof(mbedtls_ecp_point));
+    server_public_point = heap_caps_calloc(1, sizeof(mbedtls_ecp_point), MALLOC_CAP_INTERNAL);
     if (server_public_point == NULL) {
         ESP_LOGE(TAG, "failed to allocate memory for server public point");
         goto cleanup;
     }
     mbedtls_ecp_point_init(server_public_point);
 
-    server_public_key = calloc(1, len + 1);
+    server_public_key = heap_caps_calloc(1, len + 1, MALLOC_CAP_INTERNAL);
     if (server_public_key == NULL) {
         ESP_LOGE(TAG, "failed to allocate memory for server public key");
         mbedtls_ecp_point_free(server_public_point);
@@ -436,7 +438,7 @@ static unsigned char *get_kdf_salt_from_header(const char *data, size_t len)
 {
     unsigned char *kdf_salt = NULL;
     if (len >= KDF_SALT_SIZE) {
-        kdf_salt = calloc(1, KDF_SALT_SIZE);
+        kdf_salt = heap_caps_calloc(1, KDF_SALT_SIZE, MALLOC_CAP_INTERNAL);
         if (kdf_salt == NULL) {
             ESP_LOGE(TAG, "failed to allocate memory for kdf_salt");
             return NULL;
@@ -450,7 +452,7 @@ static unsigned char *get_kdf_salt_from_header(const char *data, size_t len)
 static int derive_gcm_key(const char *data, esp_encrypted_img_t *handle)
 {
     int ret = 0;
-    uint8_t *derived_key = calloc(1, GCM_KEY_SIZE);
+    uint8_t *derived_key = heap_caps_calloc(1, GCM_KEY_SIZE, MALLOC_CAP_INTERNAL);
     if (derived_key == NULL) {
         ESP_LOGE(TAG, "Failed to allocate memory for derived key");
         return ESP_ERR_NO_MEM;
@@ -499,7 +501,7 @@ static int derive_gcm_key(const char *data, esp_encrypted_img_t *handle)
         goto exit;
     }
 
-    unsigned char *hkdf_info = calloc(1, HKDF_INFO_SIZE);
+    unsigned char *hkdf_info = heap_caps_calloc(1, HKDF_INFO_SIZE, MALLOC_CAP_INTERNAL);
     if (hkdf_info == NULL) {
         ESP_LOGE(TAG, "failed to allocate memory for hkdf_info");
         ret = ESP_ERR_NO_MEM;
@@ -520,7 +522,7 @@ static int derive_gcm_key(const char *data, esp_encrypted_img_t *handle)
     memcpy(handle->gcm_key, derived_key, GCM_KEY_SIZE);
     ESP_LOGI(TAG, "GCM key derived successfully");
 
-    void *tmp_buf = realloc(handle->cache_buf, CACHE_BUF_SIZE);
+    void *tmp_buf = heap_caps_realloc(handle->cache_buf, CACHE_BUF_SIZE, MALLOC_CAP_INTERNAL);
     if (!tmp_buf) {
         ESP_LOGE(TAG, "Failed to reallocate memory for cache buffer");
         ret = ESP_ERR_NO_MEM;
@@ -603,7 +605,7 @@ static esp_err_t esp_encrypted_img_export_ecies_pub_key(hmac_key_id_t hmac_key, 
     // For SECP256R1, the maximum DER public key size is:
     // 30 bytes (ASN.1 overhead) + 2 * 32 bytes (uncompressed coordinates) = 94 bytes
     size_t max_pubkey_len = DER_ASN1_OVERHEAD + (2 * SECP256R1_COORD_SIZE);
-    *pub_key = calloc(1, max_pubkey_len);
+    *pub_key = heap_caps_calloc(1, max_pubkey_len, MALLOC_CAP_INTERNAL);
     if (*pub_key == NULL) {
         ESP_LOGE(TAG, "Failed to allocate memory for public key");
         err = ESP_ERR_NO_MEM;
@@ -629,7 +631,7 @@ static esp_err_t esp_encrypted_img_export_ecies_pub_key(hmac_key_id_t hmac_key, 
     memmove(*pub_key, *pub_key + (max_pubkey_len - ret), ret);
 
     // Resize buffer to actual size
-    unsigned char *temp_pub_key = realloc(*pub_key, *pub_key_len);
+    unsigned char *temp_pub_key = heap_caps_realloc(*pub_key, *pub_key_len, MALLOC_CAP_INTERNAL);
     if (temp_pub_key == NULL) {
         ESP_LOGE(TAG, "Failed to resize public key buffer");
         err = ESP_ERR_NO_MEM;
@@ -699,7 +701,7 @@ esp_decrypt_handle_t esp_encrypted_img_decrypt_start(const esp_decrypt_cfg_t *cf
 
     ESP_LOGI(TAG, "Initializing Decryption Handle");
 
-    esp_encrypted_img_t *handle = calloc(1, sizeof(esp_encrypted_img_t));
+    esp_encrypted_img_t *handle = heap_caps_calloc(1, sizeof(esp_encrypted_img_t), MALLOC_CAP_INTERNAL);
     if (!handle) {
         ESP_LOGE(TAG, "Couldn't allocate memory to handle");
         goto failure;
@@ -722,7 +724,7 @@ esp_decrypt_handle_t esp_encrypted_img_decrypt_start(const esp_decrypt_cfg_t *cf
         goto failure;
     }
 
-    handle->rsa_pem = calloc(1, cfg->rsa_priv_key_len);
+    handle->rsa_pem = heap_caps_calloc(1, cfg->rsa_priv_key_len, MALLOC_CAP_INTERNAL);
     if (!handle->rsa_pem) {
         ESP_LOGE(TAG, "Couldn't allocate memory to handle->rsa_pem");
         goto failure;
@@ -747,7 +749,7 @@ esp_decrypt_handle_t esp_encrypted_img_decrypt_start(const esp_decrypt_cfg_t *cf
 
     handle->hmac_key = cfg->hmac_key_id;
 #endif /* CONFIG_PRE_ENCRYPTED_OTA_USE_ECIES */
-    handle->cache_buf = calloc(1, ENC_GCM_KEY_SIZE);
+    handle->cache_buf = heap_caps_calloc(1, ENC_GCM_KEY_SIZE, MALLOC_CAP_INTERNAL);
     if (!handle->cache_buf) {
         ESP_LOGE(TAG, "Couldn't allocate memory to handle->cache_buf");
         goto failure;
@@ -785,7 +787,7 @@ static esp_err_t process_bin(esp_encrypted_img_t *handle, pre_enc_decrypt_arg_t 
 
         if ((handle->cache_buf_len + (data_len - curr_index)) - (handle->cache_buf_len + (data_len - curr_index)) % CACHE_BUF_SIZE > 0) {
             data_out_size = (handle->cache_buf_len + (data_len - curr_index)) - (handle->cache_buf_len + (data_len - curr_index)) % CACHE_BUF_SIZE;
-            args->data_out = realloc(args->data_out, data_out_size);
+            args->data_out = heap_caps_realloc(args->data_out, data_out_size, MALLOC_CAP_INTERNAL);
             if (!args->data_out) {
                 return ESP_ERR_NO_MEM;
             }
@@ -826,7 +828,7 @@ static esp_err_t process_bin(esp_encrypted_img_t *handle, pre_enc_decrypt_arg_t 
         return ESP_ERR_NOT_FINISHED;
     }
     data_out_size = handle->cache_buf_len + data_len - curr_index;
-    args->data_out = realloc(args->data_out, data_out_size);
+    args->data_out = heap_caps_realloc(args->data_out, data_out_size, MALLOC_CAP_INTERNAL);
     if (!args->data_out) {
         return ESP_ERR_NO_MEM;
     }
